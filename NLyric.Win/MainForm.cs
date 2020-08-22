@@ -8,7 +8,7 @@ namespace NLyric.Win {
 	public sealed partial class MainForm : Form {
 		public MainForm() {
 			InitializeComponent();
-			Text = GetTitle(Assembly.Load(File.ReadAllBytes("NLyric.exe")));
+			Text = GetTitle(Assembly.Load(File.ReadAllBytes("NLyric-plus-plus.exe")));
 			_cbLogin_CheckedChanged(_cbLogin, EventArgs.Empty);
 		}
 
@@ -51,7 +51,7 @@ namespace NLyric.Win {
 			string arguments = $"-d \"{_tbDirectory.Text}\"";
 			if (_cbLogin.Checked)
 				arguments += $" -a {_tbAccount.Text} -p {_tbPassword.Text}";
-			Process.Start("NLyric.exe", arguments);
+			Process.Start("NLyric-plus-plus.exe", arguments);
 		}
 	}
 }

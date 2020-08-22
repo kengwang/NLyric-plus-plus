@@ -2,12 +2,13 @@
 	<PropertyGroup>
 		<Title>$(ProjectName)</Title>
 		<Version>2.6.0.1</Version>
-		<Copyright>Copyright © 2019-2020 Wwh</Copyright>
+		<Copyright>Copyright © 2019-2020 Wwh &amp; Kengwang</Copyright>
 	</PropertyGroup>
 	<PropertyGroup>
 		<TargetFrameworks>netcoreapp3.1;net472</TargetFrameworks>
 		<OutputPath>..\bin\$(Configuration)</OutputPath>
 		<OutputType>Exe</OutputType>
+		<AssemblyName>NLyric-plus-plus</AssemblyName>
 	</PropertyGroup>
 	<ItemGroup>
 		<PackageReference Include="NeteaseCloudMusicApi" Version="3.25.3" />

@@ -4,6 +4,8 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Reflection;
+using System.Runtime.CompilerServices;
+using System.Text;
 using System.Threading.Tasks;
 using NeteaseCloudMusicApi;
 using Newtonsoft.Json;
@@ -21,7 +23,7 @@ namespace NLyric {
 		private static readonly SearchSettings _searchSettings = AllSettings.Default.Search;
 		private static readonly FuzzySettings _fuzzySettings = AllSettings.Default.Fuzzy;
 		private static readonly MatchSettings _matchSettings = AllSettings.Default.Match;
-		private static readonly LyricSettings _lyricSettings = AllSettings.Default.Lyric;
+		private static /*readonly*/ LyricSettings _lyricSettings = AllSettings.Default.Lyric;
 		private static readonly HashSet<string> _failMatchAlbums = new HashSet<string>();
 		// AlbumName
 		private static readonly Dictionary<int, NcmTrack[]> _cachedNcmTrackses = new Dictionary<int, NcmTrack[]>();
@@ -29,10 +31,13 @@ namespace NLyric {
 		private static readonly Dictionary<int, NcmLyric> _cachedNcmLyrics = new Dictionary<int, NcmLyric>();
 		// TrackId -> Lyric
 		private static NLyricDatabase _database;
+		private static Arguments arguments;
 
 		public static async Task ExecuteAsync(Arguments arguments) {
+			NLyricImpl.arguments = arguments;
 			FastConsole.WriteLine("程序会自动过滤相似度为0的结果与歌词未被收集的结果！！！", ConsoleColor.Green);
-			var loginTask = LoginIfNeedAsync(arguments);
+			AskForArgs();
+			var loginTask = LoginIfNeedAsync();
 			string databasePath = Path.Combine(arguments.Directory, ".nlyric");
 			LoadDatabase(databasePath);
 			var audioInfos = LoadAllAudioInfos(arguments.Directory);
@@ -51,10 +56,122 @@ namespace NLyric {
 			SaveDatabase(databasePath);
 		}
 
-		private static async Task LoginIfNeedAsync(Arguments arguments) {
+		private static void AskForArgs() {
+			if (arguments.noargs) {
+				if (string.IsNullOrEmpty(arguments.Directory)) {
+					FastConsole.WriteWarning("音乐目录未指定!请输入音乐目录!");
+					FastConsole.WriteLine("提示:可以直接将文件夹拖入控制台窗口快速获取文件夹路径", ConsoleColor.Green);
+					arguments.Directory = Console.ReadLine();
+				}
+
+				FastConsole.WriteInfo("是否需要将UTF8转换为ANSI Y/[N]");
+				if (FastConsole.ReadKey(true).KeyChar.ToString().ToUpper() == "Y") {
+					FastConsole.WriteInfo("您已选择转换为ANSI");
+					NLyricImpl._lyricSettings.Encoding = Encoding.GetEncoding(936);
+					arguments.Encoding = true;
+				}
+				else {
+					arguments.Encoding = false;
+				}
+
+				FastConsole.WriteInfo("是否使用 Batch API（实验性） Y/[N]");
+				if (FastConsole.ReadKey(true).KeyChar.ToString().ToUpper() == "Y") {
+					FastConsole.WriteInfo("您已选择使用 Batch API");
+					arguments.UseBatch = true;
+				}
+				else {
+					arguments.UseBatch = false;
+				}
+
+				FastConsole.WriteInfo("是否仅更新已有歌词） Y/[N]");
+				if (FastConsole.ReadKey(true).KeyChar.ToString().ToUpper() == "Y") {
+					FastConsole.WriteInfo("您已选择仅更新已有歌词");
+					arguments.UpdateOnly = true;
+				}
+				else {
+					arguments.UpdateOnly = false;
+				}
+
+			}
+			else {
+				if (arguments.Encoding) {
+					NLyricImpl._lyricSettings.Encoding = Encoding.GetEncoding(936);
+				}
+			}
+
+		}
+
+		private static async Task LoginIfNeedAsync() {
 			if (string.IsNullOrEmpty(arguments.Account) || string.IsNullOrEmpty(arguments.Password)) {
 				FastConsole.WriteLine("登录可避免出现大部分API错误！！！当前是免登录状态，若软件出错请尝试登录！！！", ConsoleColor.Green);
 				FastConsole.WriteLine("强烈建议登录使用软件：\"NLyric.exe -d C:\\Music -a example@example.com -p 123456\"", ConsoleColor.Green);
+				while (true) {
+				loginask:
+					FastConsole.WriteLine("请在下方输入用户名和密码 或者 重新运行使用命令行输入", ConsoleColor.Yellow);
+					FastConsole.WriteInfo("请输入网易云音乐账号[邮箱/手机]:");
+					string username = FastConsole.ReadLine();
+				loginfaild:
+					if (!string.IsNullOrEmpty(username)) {
+						arguments.Account = username;
+						FastConsole.WriteInfo("请输入密码 [注意,密码显示为*,请放心输入]:");
+						string key = string.Empty;
+						while (true) {
+							ConsoleKeyInfo keyinfo = FastConsole.ReadKey(true);
+							if (keyinfo.Key == ConsoleKey.Enter) //按下回车，结束
+								break;
+							else if (keyinfo.Key == ConsoleKey.Backspace && key.Length > 0) //如果是退格键并且字符没有删光
+							{
+								FastConsole.Write("\b \b", ConsoleColor.White); //输出一个退格（此时光标向左走了一位），然后输出一个空格取代最后一个星号，然后再往前走一位，也就是说其实后面有一个空格但是你看不见= =
+								key = key.Substring(0, key.Length - 1);
+							}
+
+							else if (!char.IsControl(keyinfo.KeyChar)) //过滤掉功能按键等
+							{
+								key += keyinfo.KeyChar.ToString();
+								FastConsole.Write("*", ConsoleColor.White);
+							}
+						}
+						//密码输入结束
+						try {
+							arguments.Password = key;
+							FastConsole.WriteNewLine();
+							FastConsole.WriteLine("尝试登录中...", ConsoleColor.Green);
+							if (await CloudMusic.LoginAsync(arguments.Account, arguments.Password)) {
+								FastConsole.WriteLine("登录成功！", ConsoleColor.Green);
+								return;
+							}
+							else {
+								username = null;
+								goto loginfaild;
+							}
+
+						}
+						catch (Exception) {
+							username = null;
+							goto loginfaild;
+						}
+
+					}
+					else {
+						FastConsole.WriteError("登录失败，输入[c] 使用免登陆模式    输入[r] 再次输入账号密码     按下[Ctrl + C] 即可退出软件使用命令行登录");
+						switch (FastConsole.ReadKey(true).KeyChar.ToString().ToUpper()) {
+						case "C":
+							FastConsole.WriteWarning("使用免登陆模式 可能会出现API错误导致一些无法预期的事件 是否继续 Enter 或 重试[r] ?");
+							if (FastConsole.ReadKey(true).Key == ConsoleKey.Enter) {
+								return;
+							}
+							else {
+								goto loginask;
+							}
+						case "R":
+							goto loginask;
+						default:
+							FastConsole.WriteInfo("输入错误,默认为尝试重新输入");
+							goto loginask;
+						}
+					}
+				}
+
 			}
 			else {
 				FastConsole.WriteLine("登录中...", ConsoleColor.Green);
@@ -546,6 +663,9 @@ namespace NLyric {
 				FastConsole.WriteException(ex);
 				return false;
 			}
+
+			FastConsole.WriteNewLine();
+			FastConsole.WriteNewLine();
 			FastConsole.WriteInfo($"正在尝试下载\"{Path.GetFileName(audioInfo.Path)} ({audioInfo.Track})\"的歌词。");
 			if (hasLrcFile) {
 				// 如果歌词存在，判断是否需要覆盖或更新
@@ -585,6 +705,8 @@ namespace NLyric {
 				// 歌词已收录，不是纯音乐
 				string lyric = lrc.ToString();
 				try {
+					if (!arguments.Encoding)
+						lyric = lyric.Replace(" ", " ");//全角空格转半角
 					File.WriteAllText(lrcPath, lyric, _lyricSettings.Encoding);
 				}
 				catch (Exception ex) {

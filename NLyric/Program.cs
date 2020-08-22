@@ -2,6 +2,7 @@ using System;
 using System.Cli;
 using System.Diagnostics;
 using System.IO;
+using System.Linq;
 using System.Reflection;
 using System.Threading.Tasks;
 using Newtonsoft.Json;
@@ -10,9 +11,13 @@ using NLyric.Settings;
 namespace NLyric {
 	public static class Program {
 		private static async Task Main(string[] args) {
-			if (args is null || args.Length == 0) {
+			if (args != null && args.Contains("-h")) {
 				CommandLine.ShowUsage<Arguments>();
 				return;
+			}
+			bool noargs = false;
+			if (args == null || args.Length == 0) {
+				noargs = true;
 			}
 
 			try {
@@ -20,9 +25,17 @@ namespace NLyric {
 			}
 			catch {
 			}
-			if (!CommandLine.TryParse(args, out Arguments arguments)) {
-				CommandLine.ShowUsage<Arguments>();
-				return;
+
+			Arguments arguments = null;
+			if (!noargs) {
+				if (!CommandLine.TryParse(args, out arguments)) {
+					CommandLine.ShowUsage<Arguments>();
+					return;
+				}
+			}
+			else {
+				arguments = new Arguments();
+				arguments.noargs = true;
 			}
 			AllSettings.Default = JsonConvert.DeserializeObject<AllSettings>(File.ReadAllText("Settings.json"));
 			await NLyricImpl.ExecuteAsync(arguments);
