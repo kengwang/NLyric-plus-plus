@@ -67,6 +67,9 @@ namespace NLyric {
 				FastConsole.WriteInfo("是否需要将UTF8转换为ANSI Y/[N]");
 				if (FastConsole.ReadKey(true).KeyChar.ToString().ToUpper() == "Y") {
 					FastConsole.WriteInfo("您已选择转换为ANSI");
+#if NETCOREAPP
+					Encoding.RegisterProvider(CodePagesEncodingProvider.Instance); //.net core需要单独register
+#endif
 					NLyricImpl._lyricSettings.Encoding = Encoding.GetEncoding(936);
 					arguments.Encoding = true;
 				}
@@ -584,11 +587,14 @@ namespace NLyric {
 			if (sources.Length == 0)
 				return null;
 
-			FastConsole.WriteInfo("请手动输入1,2,3...选择匹配的项，若不存在，请直接按下回车键。");
+			FastConsole.WriteInfo("请手动输入1,2,3...选择匹配的项，若不存在或选择 自动选择 项，请直接按下回车键。若不想选择自动选择,请输入 0");
+			int autoselect = -1; //自动选择
+			if (nameSimilarities[sources[0]] == 1.00)
+				autoselect = 0;
 			FastConsole.WriteInfo("对比项：" + TrackOrAlbumToString(target));
 			for (int i = 0; i < sources.Length; i++) {
 				double nameSimilarity = nameSimilarities[sources[i]];
-				string text = $"{i + 1}. {sources[i]} (s:{nameSimilarity:F2})";
+				string text = $"{i + 1}. {sources[i]} (s:{nameSimilarity:F2})" + (autoselect == i ? " [自动选择]" : "");
 				if (nameSimilarity >= 0.85)
 					FastConsole.WriteLine(text, ConsoleColor.Green);
 				else if (nameSimilarity >= 0.5)
@@ -600,8 +606,15 @@ namespace NLyric {
 			var result = default(TSource);
 			do {
 				string userInput = FastConsole.ReadLine().Trim();
-				if (userInput.Length == 0)
+				if (userInput == "0")
 					break;
+				if (userInput.Length == 0 && autoselect >= 0) {
+					result = sources[autoselect];
+					break;
+				}
+				else if (userInput.Length == 0) {
+					break;
+				}
 				if (int.TryParse(userInput, out int index)) {
 					index -= 1;
 					if (index >= 0 && index < sources.Length) {
